@@ -46,7 +46,7 @@ func normalizeRequestWithMetadata(body []byte, spec ModelSpec, metadata *provide
 	requestedEffort = requestedEffort || hasRecognizedConsoleReasoningEffort(payload)
 	normalizeReasoning(payload, spec)
 	updateConsoleReasoningMetadata(payload, spec, requestedEffort, metadata)
-	ensureReasoningInclude(payload)
+	normalizeReasoningInclude(payload)
 	retainedClientTools, err := normalizeConsoleTools(payload)
 	if err != nil {
 		return nil, err
@@ -239,7 +239,11 @@ func normalizeEffort(value string) string {
 	}
 }
 
-func ensureReasoningInclude(payload map[string]any) {
+// normalizeReasoningInclude cleans the caller's include list without adding
+// reasoning.encrypted_content. Multi-agent responses can carry 100+ MiB of
+// encrypted reasoning, which exceeds the non-streaming transfer limit, so the
+// opaque state is returned only when the caller asks for it.
+func normalizeReasoningInclude(payload map[string]any) {
 	value, _ := payload["include"].([]any)
 	seen := make(map[string]struct{})
 	result := make([]any, 0)
@@ -254,8 +258,9 @@ func ensureReasoningInclude(payload map[string]any) {
 		seen[name] = struct{}{}
 		result = append(result, name)
 	}
-	if _, exists := seen["reasoning.encrypted_content"]; !exists {
-		result = append(result, "reasoning.encrypted_content")
+	if len(result) == 0 {
+		delete(payload, "include")
+		return
 	}
 	payload["include"] = result
 }

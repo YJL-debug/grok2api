@@ -367,9 +367,8 @@ func TestNormalizeRequestAppliesConsoleContract(t *testing.T) {
 	if reasoning["effort"] != "xhigh" {
 		t.Fatalf("reasoning = %#v", reasoning)
 	}
-	include, _ := payload["include"].([]any)
-	if len(include) != 1 || include[0] != "reasoning.encrypted_content" {
-		t.Fatalf("include = %#v", include)
+	if payload["include"] != nil {
+		t.Fatalf("include = %#v", payload["include"])
 	}
 	tools, _ := payload["tools"].([]any)
 	if len(tools) != 2 || toolIdentity(tools[0]) != "web_search" || toolIdentity(tools[1]) != "function:lookup" {
@@ -683,8 +682,7 @@ func TestNormalizeRequestPreservesMultiAgentDefaultsWithoutInjectingTools(t *tes
 	if payload["max_output_tokens"] != float64(1_000_000) || payload["reasoning"] != nil || payload["store"] != false {
 		t.Fatalf("multi-agent defaults = %#v", payload)
 	}
-	include, _ := payload["include"].([]any)
-	if len(include) != 1 || include[0] != "reasoning.encrypted_content" || payload["tools"] != nil || payload["tool_choice"] != nil {
+	if payload["include"] != nil || payload["tools"] != nil || payload["tool_choice"] != nil {
 		t.Fatalf("multi-agent compatibility = %#v", payload)
 	}
 	metadata := &provider.NormalizedRequestMetadata{}
@@ -760,9 +758,8 @@ func TestNormalizeRequestAppliesConsoleCompatibilityBoundary(t *testing.T) {
 	if payload["response_format"] != nil || payload["reasoning"] != nil || payload["tool_choice"] != "auto" {
 		t.Fatalf("payload boundary = %#v", payload)
 	}
-	include, _ := payload["include"].([]any)
-	if len(include) != 1 || include[0] != "reasoning.encrypted_content" {
-		t.Fatalf("include = %#v", include)
+	if payload["include"] != nil {
+		t.Fatalf("include = %#v", payload["include"])
 	}
 	text, _ := payload["text"].(map[string]any)
 	format, _ := text["format"].(map[string]any)
@@ -2473,5 +2470,28 @@ func TestConsoleVideoEditRejectsNonImagineVideoModel(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "grok-imagine-video") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestNormalizeRequestKeepsCallerRequestedReasoningInclude(t *testing.T) {
+	spec, ok := Resolve("grok-4.20-multi-agent-0309")
+	if !ok {
+		t.Fatal("grok-4.20-multi-agent-0309 missing")
+	}
+	body, err := normalizeRequest([]byte(`{
+		"model":"grok-4.20-multi-agent-0309",
+		"input":"hello",
+		"include":["reasoning.encrypted_content","",  "reasoning.encrypted_content"]
+	}`), spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	include, _ := payload["include"].([]any)
+	if len(include) != 1 || include[0] != "reasoning.encrypted_content" {
+		t.Fatalf("include = %#v", include)
 	}
 }
